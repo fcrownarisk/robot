@@ -1,1 +1,9 @@
-
+with(document.createElement('canvas').appendChild(this).parentElement){
+  width=height=50
+  with(getContext('2d')){
+    fillStyle='#777'
+    fillRect(0,0,50,50)
+    fillStyle='#f00'
+    fillRect((50-15)/2,(50-15)/2,15,15)
+  }
+}
