@@ -1,88 +1,116 @@
-class GifLoader {
+ class ImageLoader {
             constructor() {
-                this.gallery = document.getElementById('gifGallery');
-                this.initFileInput();
+                this.canvas = document.getElementById('imageCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.images = []; // 存储加载的图片数据
+                this.validSizes = new Set(['15x15', '20x20', '25x25']); // 允许的尺寸
+                this.spacing = 10; // 图片间的最小间距
+
+                this.initializeEventListeners();
             }
 
-            initFileInput() {
-                const input = document.getElementById('gifInput');
-                input.addEventListener('change', (e) => {
-                    this.handleFiles(e.target.files);
-                });
+            initializeEventListeners() {
+                this.canvas.addEventListener('dragover', e => e.preventDefault());
+                this.canvas.addEventListener('drop', e => this.handleDrop(e));
             }
 
-            handleFiles(files) {
-                Array.from(files).forEach(file => {
-                    if (!file.type.match(/image\/gif/)) return;
+            handleDrop(e) {
+                e.preventDefault();
+                const files = e.dataTransfer.files;
+                this.loadImages(files);
+            }
 
-                    const reader = new FileReader();
-                    const loader = this.createLoaderUI(file.name);
+            async loadImages(files) {
+                for (const file of Array.from(files)) {
+                    if (!file.type.startsWith('image/')) continue;
+
+                    const img = new Image();
+                    img.src = URL.createObjectURL(file);
                     
-                    reader.onloadstart = () => this.updateLoader(loader, 0);
-                    reader.onprogress = (e) => 
-                        this.updateLoader(loader, (e.loaded / e.total) * 100);
-                    reader.onload = (e) => 
-                        this.createGIFViewer(e.target.result, loader);
-                    reader.onerror = () => 
-                        this.loadError(loader, 'Error loading file');
-
-                    reader.readAsArrayBuffer(file);
-                });
+                    await new Promise(resolve => {
+                        img.onload = () => {
+                            const size = `${img.naturalWidth}x${img.naturalHeight}`;
+                            if (this.validSizes.has(size)) {
+                                this.placeImage(img, size);
+                                this.drawAll();
+                            }
+                            resolve();
+                        };
+                    });
+                }
             }
 
-            createLoaderUI(filename) {
-                const container = document.createElement('div');
-                container.className = 'gif-container';
-                container.innerHTML = `
-                    <div class="loader">
-                        <div class="filename">${filename}</div>
-                        <div class="progress-bar" style="
-                            width: 200px;
-                            height: 20px;
-                            border: 1px solid #333;
-                            margin: 5px 0;">
-                            <div class="progress" style="
-                                width: 0%;
-                                height: 100%;
-                                background: #4CAF50;"></div>
-                        </div>
-                    </div>
-                `;
-                this.gallery.appendChild(container);
-                return container;
-            }
-
-            updateLoader(container, percent) {
-                const progress = container.querySelector('.progress');
-                progress.style.width = `${Math.min(percent, 100)}%`;
-            }
-
-            loadError(container, message) {
-                container.querySelector('.progress').style.background = '#f44336';
-                container.querySelector('.filename').textContent = message;
-            }
-
-            createGIFViewer(arrayBuffer, loaderContainer) {
-                const blob = new Blob([arrayBuffer], {type: 'image/gif'});
-                const url = URL.createObjectURL(blob);
+            placeImage(img, size) {
+                // 计算随机位置（确保不超出画布边界）
+                const maxX = this.canvas.width - img.naturalWidth - this.spacing;
+                const maxY = this.canvas.height - img.naturalHeight - this.spacing;
                 
-                const img = new Image();
-                img.onload = () => {
-                    URL.revokeObjectURL(url);
-                    this.replaceLoaderWithGIF(loaderContainer, img);
-                };
-                img.onerror = () => 
-                    this.loadError(loaderContainer, 'Invalid GIF file');
-                img.src = url;
+                let collision;
+                let attempts = 0;
+                do {
+                    collision = false;
+                    const x = this.spacing + Math.floor(Math.random() * maxX);
+                    const y = this.spacing + Math.floor(Math.random() * maxY);
+
+                    // 简单碰撞检测
+                    for (const existingImg of this.images) {
+                        if (
+                            x < existingImg.x + existingImg.width + this.spacing &&
+                            x + img.naturalWidth + this.spacing > existingImg.x &&
+                            y < existingImg.y + existingImg.height + this.spacing &&
+                            y + img.naturalHeight + this.spacing > existingImg.y
+                        ) {
+                            collision = true;
+                            break;
+                        }
+                    }
+
+                    if (!collision) {
+                        this.images.push({
+                            img: img,
+                            x: x,
+                            y: y,
+                            width: img.naturalWidth,
+                            height: img.naturalHeight
+                        });
+                        return;
+                    }
+                    attempts++;
+                } while (collision && attempts < 100); // 最多尝试100次
             }
 
-            replaceLoaderWithGIF(container, img) {
-                container.innerHTML = '';
-                container.appendChild(img);
-                img.style.display = 'block';
-                img.style.maxWidth = '100%';
+            drawAll() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // 绘制所有图片
+                this.images.forEach(image => {
+                    this.ctx.drawImage(
+                        image.img,
+                        image.x,
+                        image.y,
+                        image.width,
+                        image.height
+                    );
+
+                    // 添加尺寸标签（可选）
+                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    this.ctx.fillRect(
+                        image.x,
+                        image.y + image.height - 20,
+                        image.width,
+                        20
+                    );
+                  
+                    this.ctx.fillStyle = 'white';
+                    this.ctx.font = '12px Arial';
+                    this.ctx.fillText(
+                        `${image.width}x${image.height}`,
+                        image.x + 5,
+                        image.y + image.height - 5
+                    );
+                });
             }
         }
 
-        // Initialize GIF loader
-        new GifLoader();
+        // 初始化加载器
+        const loader = new ImageLoader();
